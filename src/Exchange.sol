@@ -5,10 +5,12 @@ import "../lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 
 contract Exchange is ERC20 {
     address public tokenAddress;
+    address public factoryAddress;
 
     constructor(address _token) ERC20("UniClone-v1", "Unilp") {
         require(_token != address(0), "invalid token address");
         tokenAddress = _token;
+        factoryAddress = msg.sender;
     }
 
     function addLiquidity(
@@ -68,19 +70,26 @@ contract Exchange is ERC20 {
 
         return _getAmount(_tokenSold, tokenReserve, address(this).balance);
     }
+    function ethToToken(uint256 _minTokens, address recipient) private {
+  uint256 tokenReserve = getReserve();
+  uint256 tokensBought = getAmount(
+    msg.value,
+    address(this).balance - msg.value,
+    tokenReserve
+  );
 
-    function ethToTokenSwap(uint256 _minTokens) public payable {
-        uint256 tokenReserve = getReserve();
-        uint256 tokensBought = _getAmount(
-            msg.value,
-            address(this).balance - msg.value,
-            tokenReserve
-        );
+  require(tokensBought >= _minTokens, "insufficient output amount");
 
-        require(tokensBought >= _minTokens, "insufficient output amount");
+  IERC20(tokenAddress).transfer(recipient, tokensBought);
+}
 
-        IERC20(tokenAddress).transfer(msg.sender, tokensBought);
-    }
+  function ethToTokenSwap(uint256 _minTokens) public payable {
+  ethToToken(_minTokens, msg.sender);
+}
+
+function ethToTokenSwap(uint256 _minTokens) public payable {
+  ethToToken(_minTokens, msg.sender);
+}
 
     function tokenToEthSwap(uint256 _tokensSold, uint256 _minEth) public {
         uint256 tokenReserve = getReserve();
@@ -114,4 +123,42 @@ contract Exchange is ERC20 {
 
         return (ethAmount, tokenAmount);
     }
+
+interface IFactory {
+  function getExchange(address _tokenAddress) external returns (address);
+}
+
+
+    function tokenToTokenSwap(
+    uint256 _tokensSold,
+    uint256 _minTokensBought,
+    address _tokenAddress
+) public {
+    address exchangeAddress = IFactory(factoryAddress).getExchange(
+    _tokenAddress
+);
+require(
+    exchangeAddress != address(this) && exchangeAddress != address(0),
+    "invalid exchange address"
+);
+uint256 tokenReserve = getReserve();
+uint256 ethBought = getAmount(
+    _tokensSold,
+    tokenReserve,
+    address(this).balance
+);
+
+IERC20(tokenAddress).transferFrom(
+    msg.sender,
+    address(this),
+    _tokensSold
+);
+    IExchange(exchangeAddress).ethToTokenTransfer{value: ethBought}(
+        _minTokensBought,
+        msg.sender
+    );
+
+
+
+}
 }
